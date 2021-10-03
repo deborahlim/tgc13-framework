@@ -1,3 +1,4 @@
+const e = require('express');
 const express = require('express');
 const router = express.Router();
 const { createProductForm, bootstrapField } = require('../forms')
@@ -21,6 +22,7 @@ router.get('/', async function(req,res){
     let products = await Product.collection().fetch({
         withRelated:['category', 'tags'] // <-- indicate that we want to load in the category information for each product
     });
+    console.log(products.toJSON())
     res.render('products/index',{
         'products': products.toJSON()
     })
@@ -46,15 +48,7 @@ router.get('/create', async function(req,res){
 
 router.post('/create', async function(req,res){
 
-    const allCategories = await Category.fetchAll().map(function(category){
-        return [ category.get('id'), category.get('name')]
-    })
-
-    const allTags = await (await Tag.fetchAll()).map(function(tag){
-        return [ tag.get('id'), tag.get('name')]
-    })
-
-    const productForm = createProductForm(allCategories, allTags);
+    const productForm = createProductForm();
     // first arg of handle is the request
     // second arg is the setting objects
     productForm.handle(req, {
@@ -131,6 +125,7 @@ router.get('/:product_id/update', async function(req,res){
 
     // fetch all the related tags of the product
     let selectedTags = await product.related('tags').pluck('id');
+    console.log(selectedTags);
     productForm.fields.tags.value = selectedTags;
 
     res.render('products/update',{
@@ -140,27 +135,22 @@ router.get('/:product_id/update', async function(req,res){
 })
 
 router.post('/:product_id/update', async function(req,res){
-  
-    // retrieve an array of all available categories
-    const allCategories = await Category.fetchAll().map(function(category){
-        return [ category.get('id'), category.get('name')]
-    })
 
-    // fetch the product that we want to  update
-    // let product = await Product.where({
-    //     'id': req.params.product_id
-    // }).fetch({
-    //     required: true
-    // });
-    let product = await getProductById(req.params.product_id);
-
+    const product = await Product.where({
+        'id': req.params.product_id
+    }).fetch({
+        'require': true,
+        'withRelated':['tags']
+    });
+    // console.log(product);
     // process the form
-    const productForm = createProductForm(allCategories);
+    const productForm = createProductForm();
     productForm.handle(req, {
         'success': async function(form) {
             // form.data MUST HAVE EXACTLY THE SAME KEYS
             // AS THE COLUMNS IN THE PRODUCTS TABLE
-            // with the exception of id
+            // with the exception of id'
+            console.log(form.data);
             let {tags, ...productData} = form.data; // <-- extract out the tags key into the tags variable
                                                     // and place the other remaining keys into an object named productData
                                                     // for more info, consutl JavaScript Object Destructuring
@@ -179,20 +169,17 @@ router.post('/:product_id/update', async function(req,res){
             // product.set('description', form.data.description');
             // product.set('category_id', form.data.category_id)
 
-
             // update the relationship
-
             // currently selected tags
             let tagIds = tags.split(',')
-
+         
             // get all the tags that are selected first
-            let existingTagIds = await product.related('tags').pluck('id')
-
+            let existingTagIds = await product.related('tags').pluck("id");
             // remove all the tags that are not selected any more
             let toRemove = existingTagIds.filter(function(id){
                 return tagIds.includes(id) === false
             })
-
+            
             await product.tags().detach(toRemove);
 
             // add in all the tags that are selected
@@ -203,11 +190,7 @@ router.post('/:product_id/update', async function(req,res){
 })
 
 router.get('/:product_id/delete', async function(req,res){
-    const product = await Product.where({
-        'id': req.params.product_id
-    }).fetch({
-        'required': true
-    });
+   getProductById(req.params.product_id)
 
     res.render('products/delete', {
         'product': product.toJSON()
